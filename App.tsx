@@ -112,7 +112,7 @@ const App: React.FC = () => {
               <Icon name="Target" size={24} />
             </div>
             <div>
-              <h1 className="text-xl md:text-2xl font-bold text-slate-900">活動名額公平分配系統</h1>
+              <h1 className="text-xl md:text-2xl font-bold text-slate-900">台灣三洋健康促進活動名額公平分配系統</h1>
               <p className="text-xs md:text-sm text-slate-500">採用最大餘數法 (Hamilton Method) 進行精確分配</p>
             </div>
           </div>
