@@ -25,3 +25,11 @@ export interface DrawResult {
   winners: string[];
   waitlist: string[];
 }
+
+export interface SavedRecord {
+  id: string;
+  title: string;
+  timestamp: number;
+  totalLimit: number;
+  units: Unit[];
+}

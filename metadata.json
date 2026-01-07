@@ -1,5 +1,5 @@
 {
-  "name": "Fair Quota & Lucky Draw Assistant",
+  "name": "活動名額分配系統",
   "description": "A professional tool for allocating event quotas proportionally using the Largest Remainder Method and conducting random lucky draws for participants.",
   "requestFramePermissions": []
 }

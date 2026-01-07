@@ -1,6 +1,6 @@
 
-import React, { useState, useMemo, useCallback } from 'react';
-import { Unit, DrawResult, CalculationResult } from './types';
+import React, { useState, useMemo, useEffect, useCallback } from 'react';
+import { Unit, DrawResult, CalculationResult, SavedRecord } from './types';
 import { calculateAllocation } from './utils/allocation';
 import Icon from './components/Icon';
 
@@ -15,11 +15,50 @@ const App: React.FC = () => {
   const [newUnitName, setNewUnitName] = useState('');
   const [newUnitCount, setNewUnitCount] = useState('');
 
+  // Storage State
+  const [savedRecords, setSavedRecords] = useState<SavedRecord[]>([]);
+  const [isRecordModalOpen, setIsRecordModalOpen] = useState(false);
+  const [saveTitle, setSaveTitle] = useState('');
+  const [isSaving, setIsSaving] = useState(false);
+
   // Drawing State
   const [selectedUnitId, setSelectedUnitId] = useState<string>('');
   const [drawQuota, setDrawQuota] = useState<number>(0);
   const [participantText, setParticipantText] = useState<string>('');
   const [drawResult, setDrawResult] = useState<DrawResult | null>(null);
+
+  // --- Initialization & Auto-save ---
+  useEffect(() => {
+    // Load last session
+    const lastSession = localStorage.getItem('fair_quota_last_session');
+    if (lastSession) {
+      try {
+        const { totalLimit: l, units: u } = JSON.parse(lastSession);
+        setTotalLimit(l);
+        setUnits(u);
+      } catch (e) {
+        console.error("Failed to load last session", e);
+      }
+    }
+
+    // Load saved records
+    const storedRecords = localStorage.getItem('fair_quota_records');
+    if (storedRecords) {
+      try {
+        setSavedRecords(JSON.parse(storedRecords));
+      } catch (e) {
+        console.error("Failed to load records", e);
+      }
+    }
+  }, []);
+
+  useEffect(() => {
+    // Auto-save current state
+    const timer = setTimeout(() => {
+      localStorage.setItem('fair_quota_last_session', JSON.stringify({ totalLimit, units }));
+    }, 1000);
+    return () => clearTimeout(timer);
+  }, [totalLimit, units]);
 
   // --- Derived State ---
   const calculation: CalculationResult = useMemo(() => {
@@ -50,6 +89,43 @@ const App: React.FC = () => {
   const updateUnitCount = (id: string, newVal: string) => {
     const count = parseInt(newVal) || 0;
     setUnits(prev => prev.map(u => u.id === id ? { ...u, count } : u));
+  };
+
+  const saveCurrentRecord = () => {
+    if (!saveTitle.trim()) {
+      alert("請輸入存檔名稱");
+      return;
+    }
+    const newRecord: SavedRecord = {
+      id: Date.now().toString(),
+      title: saveTitle.trim(),
+      timestamp: Date.now(),
+      totalLimit,
+      units: [...units]
+    };
+    const updated = [newRecord, ...savedRecords];
+    setSavedRecords(updated);
+    localStorage.setItem('fair_quota_records', JSON.stringify(updated));
+    setSaveTitle('');
+    setIsSaving(false);
+    alert("存檔成功！");
+  };
+
+  const loadRecord = (record: SavedRecord) => {
+    if (confirm(`確定要載入「${record.title}」嗎？目前的編輯內容將會被覆蓋。`)) {
+      setTotalLimit(record.totalLimit);
+      setUnits(record.units);
+      setIsRecordModalOpen(false);
+    }
+  };
+
+  const deleteRecord = (id: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (confirm("確定要刪除此存檔嗎？")) {
+      const updated = savedRecords.filter(r => r.id !== id);
+      setSavedRecords(updated);
+      localStorage.setItem('fair_quota_records', JSON.stringify(updated));
+    }
   };
 
   const copyResults = () => {
@@ -112,18 +188,33 @@ const App: React.FC = () => {
               <Icon name="Target" size={24} />
             </div>
             <div>
-              <h1 className="text-xl md:text-2xl font-bold text-slate-900">台灣三洋健康促進活動名額公平分配系統</h1>
-              <p className="text-xs md:text-sm text-slate-500">採用最大餘數法 (Hamilton Method) 進行精確分配</p>
+              <h1 className="text-xl md:text-2xl font-bold text-slate-900">活動名額公平分配系統</h1>
+              <p className="text-xs md:text-sm text-slate-500">採用最大餘數法進行精確比例分配</p>
             </div>
           </div>
-          <div className="flex items-center gap-3 bg-slate-50 p-2 rounded-lg border border-slate-200">
-            <label className="text-sm font-medium text-slate-600 whitespace-nowrap">活動總限額</label>
-            <input 
-              type="number"
-              value={totalLimit}
-              onChange={(e) => setTotalLimit(parseInt(e.target.value) || 0)}
-              className="w-24 px-3 py-1 bg-white border border-slate-300 rounded-md focus:ring-2 focus:ring-blue-500 outline-none text-lg font-bold text-blue-700 text-center"
-            />
+          
+          <div className="flex items-center gap-4">
+            <div className="flex items-center gap-3 bg-slate-50 p-2 rounded-lg border border-slate-200">
+              <label className="text-sm font-medium text-slate-600 whitespace-nowrap hidden sm:inline">活動總限額</label>
+              <input 
+                type="number"
+                value={totalLimit}
+                onChange={(e) => setTotalLimit(parseInt(e.target.value) || 0)}
+                className="w-20 sm:w-24 px-3 py-1 bg-white border border-slate-300 rounded-md focus:ring-2 focus:ring-blue-500 outline-none text-lg font-bold text-blue-700 text-center"
+              />
+            </div>
+            <button 
+              onClick={() => setIsRecordModalOpen(true)}
+              className="p-2.5 bg-slate-100 text-slate-600 rounded-lg hover:bg-slate-200 transition-colors relative"
+              title="歷史紀錄"
+            >
+              <Icon name="Archive" size={20} />
+              {savedRecords.length > 0 && (
+                <span className="absolute -top-1 -right-1 w-4 h-4 bg-red-500 text-white text-[10px] flex items-center justify-center rounded-full font-bold">
+                  {savedRecords.length}
+                </span>
+              )}
+            </button>
           </div>
         </div>
       </header>
@@ -133,10 +224,42 @@ const App: React.FC = () => {
         {/* Left Column: Setup & Input */}
         <div className="lg:col-span-4 space-y-6">
           <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
-            <div className="bg-slate-50 border-b border-slate-200 px-6 py-4 flex items-center gap-2">
-              <Icon name="Users" size={18} className="text-blue-600" />
-              <h2 className="font-bold text-slate-800 uppercase tracking-wider text-sm">單位資料錄入</h2>
+            <div className="bg-slate-50 border-b border-slate-200 px-6 py-4 flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <Icon name="Users" size={18} className="text-blue-600" />
+                <h2 className="font-bold text-slate-800 uppercase tracking-wider text-sm">單位資料錄入</h2>
+              </div>
+              <button 
+                onClick={() => setIsSaving(true)}
+                className="text-blue-600 hover:text-blue-800 flex items-center gap-1 text-xs font-bold"
+              >
+                <Icon name="Save" size={14} /> 存檔
+              </button>
             </div>
+            
+            {/* Quick Save Prompt */}
+            {isSaving && (
+              <div className="p-4 bg-blue-50 border-b border-blue-100 animate-in slide-in-from-top duration-300">
+                <label className="block text-[10px] font-black text-blue-400 uppercase mb-2">存檔名稱</label>
+                <div className="flex gap-2">
+                  <input 
+                    autoFocus
+                    type="text"
+                    value={saveTitle}
+                    placeholder="例如：2024 春季論壇"
+                    onChange={(e) => setSaveTitle(e.target.value)}
+                    className="flex-1 px-3 py-2 bg-white border border-blue-200 rounded-lg outline-none text-sm font-bold"
+                  />
+                  <button onClick={saveCurrentRecord} className="p-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700">
+                    <Icon name="Check" size={18} />
+                  </button>
+                  <button onClick={() => setIsSaving(false)} className="p-2 bg-slate-200 text-slate-600 rounded-lg hover:bg-slate-300">
+                    <Icon name="X" size={18} />
+                  </button>
+                </div>
+              </div>
+            )}
+
             <div className="p-6 space-y-4">
               <form onSubmit={handleAddUnit} className="space-y-3">
                 <div className="grid grid-cols-3 gap-2">
@@ -174,7 +297,7 @@ const App: React.FC = () => {
                 <div className="flex items-center justify-between mb-2">
                   <span className="text-xs font-bold text-slate-400 uppercase tracking-widest">已加入單位 ({units.length})</span>
                 </div>
-                <div className="space-y-2 max-h-[400px] overflow-y-auto custom-scrollbar pr-1">
+                <div className="space-y-2 max-h-[300px] overflow-y-auto custom-scrollbar pr-1">
                   {units.length === 0 && (
                     <div className="text-center py-12 border-2 border-dashed border-slate-100 rounded-xl">
                       <p className="text-slate-400 text-sm">請在上方輸入單位報名資料</p>
@@ -255,7 +378,7 @@ const App: React.FC = () => {
                     <tr key={row.id} className="hover:bg-slate-50 transition-colors border-b border-slate-50 last:border-0 group">
                       <td className="px-6 py-4">
                         <p className="font-bold text-slate-800">{row.name}</p>
-                        <p className="text-[10px] text-slate-400 font-mono">ID: {row.id}</p>
+                        <p className="text-[10px] text-slate-400 font-mono italic opacity-60">比例: {(row.exactShare).toFixed(2)}</p>
                       </td>
                       <td className="px-6 py-4 text-right text-slate-600 font-medium">
                         {row.count}
@@ -292,10 +415,7 @@ const App: React.FC = () => {
               <div className="flex items-start gap-2 text-[11px] text-slate-400 leading-relaxed max-w-lg">
                 <Icon name="Info" size={14} className="mt-0.5 shrink-0" />
                 <p>
-                  演算法說明：系統首先根據單位比例計算其精確份額 (Exact Share)，
-                  對每個單位進行無條件捨去取得基本配額。
-                  剩餘的名額按小數點「餘數」由大到小依次補足，
-                  確保總數絕對等於限額並最大化公平。
+                  演算法說明：系統首先根據單位比例計算其精確份額 (Exact Share)，對每個單位進行無條件捨去取得基本配額。剩餘的名額按小數點「餘數」由大到小依次補足，確保總數絕對等於限額並最大化公平。
                 </p>
               </div>
               <button 
@@ -314,9 +434,9 @@ const App: React.FC = () => {
               <div className="text-white">
                 <h2 className="text-2xl font-black mb-1 flex items-center gap-2">
                   <Icon name="Dices" size={28} />
-                  隨機抽籤小工具
+                  隨機抽籤工具
                 </h2>
-                <p className="text-blue-100 text-sm opacity-80">自動帶入核定名額，快速抽選中選名單</p>
+                <p className="text-blue-100 text-sm opacity-80">自動帶入核定名額，抽選名單</p>
               </div>
               
               <div className="flex flex-wrap gap-4">
@@ -428,6 +548,71 @@ const App: React.FC = () => {
 
         </div>
       </main>
+
+      {/* Record Management Modal */}
+      {isRecordModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <div className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm" onClick={() => setIsRecordModalOpen(false)}></div>
+          <div className="relative bg-white w-full max-w-md rounded-2xl shadow-2xl overflow-hidden animate-in zoom-in-95 duration-200">
+            <div className="px-6 py-4 bg-slate-50 border-b border-slate-200 flex items-center justify-between">
+              <h3 className="font-black text-slate-800 flex items-center gap-2">
+                <Icon name="Archive" size={18} className="text-blue-600" />
+                歷史存檔紀錄
+              </h3>
+              <button onClick={() => setIsRecordModalOpen(false)} className="text-slate-400 hover:text-slate-600">
+                <Icon name="X" size={20} />
+              </button>
+            </div>
+            
+            <div className="p-4 max-h-[70vh] overflow-y-auto custom-scrollbar">
+              {savedRecords.length === 0 ? (
+                <div className="py-16 text-center text-slate-400">
+                  <Icon name="CloudOff" size={48} className="mx-auto mb-3 opacity-20" />
+                  <p className="font-bold text-sm">目前沒有任何存檔</p>
+                  <p className="text-xs mt-1">點擊左側「存檔」按鈕即可儲存當前配置</p>
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  {savedRecords.map(record => (
+                    <div 
+                      key={record.id}
+                      onClick={() => loadRecord(record)}
+                      className="group p-4 border border-slate-100 rounded-xl hover:border-blue-300 hover:shadow-md transition-all cursor-pointer bg-slate-50/50 hover:bg-white"
+                    >
+                      <div className="flex justify-between items-start mb-2">
+                        <h4 className="font-bold text-slate-800 group-hover:text-blue-700 transition-colors">{record.title}</h4>
+                        <button 
+                          onClick={(e) => deleteRecord(record.id, e)}
+                          className="p-1.5 text-slate-300 hover:text-red-500 hover:bg-red-50 rounded-md transition-all opacity-0 group-hover:opacity-100"
+                        >
+                          <Icon name="Trash2" size={14} />
+                        </button>
+                      </div>
+                      <div className="flex items-center gap-3 text-[10px] font-bold text-slate-400 uppercase tracking-widest">
+                        <span className="flex items-center gap-1">
+                          <Icon name="Calendar" size={10} />
+                          {new Date(record.timestamp).toLocaleDateString()}
+                        </span>
+                        <span className="flex items-center gap-1">
+                          <Icon name="Users" size={10} />
+                          {record.units.length} 單位
+                        </span>
+                        <span className="flex items-center gap-1">
+                          <Icon name="Target" size={10} />
+                          名額 {record.totalLimit}
+                        </span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+            <div className="px-6 py-4 bg-slate-50 border-t border-slate-200 text-center">
+              <p className="text-[10px] text-slate-400 font-bold uppercase">數據儲存於您的瀏覽器本地空間</p>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Footer Branding */}
       <footer className="max-w-7xl mx-auto px-8 py-12 border-t border-slate-200 mt-12 text-center">
